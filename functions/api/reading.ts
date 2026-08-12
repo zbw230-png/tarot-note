@@ -1,115 +1,99 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node'
+// Cloudflare Pages Function — proxies requests to DeepSeek API with streaming
 
-// DeepSeek API configuration
-const DEEPSEEK_API_URL = 'https://api.deepseek.com/v1/chat/completions'
-const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY || ''
-const DEEPSEEK_MODEL = 'deepseek-chat'
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // CORS
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
-
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end()
-  }
-
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
-  const { spread, cards } = req.body || {}
-
-  if (!spread || !cards || !Array.isArray(cards)) {
-    return res.status(400).json({ error: 'Missing spread or cards' })
-  }
-
-  // Build the prompt (server-side duplicate of prompt.ts logic for independence)
-  const systemPrompt = buildSystemPrompt()
-  const userPrompt = buildUserPrompt(spread, cards)
-
-  if (!DEEPSEEK_API_KEY) {
-    return res.status(500).json({ error: 'API Key not configured' })
-  }
-
-  try {
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: DEEPSEEK_MODEL,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        stream: true,
-        temperature: 0.8,
-        max_tokens: 2048,
-      }),
-    })
-
-    if (!response.ok) {
-      const err = await response.text()
-      console.error('DeepSeek API error:', err)
-      return res.status(response.status).json({ error: `DeepSeek API error: ${err}` })
-    }
-
-    // Stream the response back to the client
-    res.setHeader('Content-Type', 'text/event-stream')
-    res.setHeader('Cache-Control', 'no-cache')
-    res.setHeader('Connection', 'keep-alive')
-
-    const reader = response.body?.getReader()
-    if (!reader) {
-      return res.status(500).json({ error: 'No response body from DeepSeek' })
-    }
-
-    const decoder = new TextDecoder()
-    let buffer = ''
-
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-
-      buffer += decoder.decode(value, { stream: true })
-      const lines = buffer.split('\n')
-      buffer = lines.pop() || ''
-
-      for (const line of lines) {
-        const trimmed = line.trim()
-        if (!trimmed || !trimmed.startsWith('data: ')) continue
-
-        const data = trimmed.slice(6)
-        if (data === '[DONE]') {
-          res.write('data: [DONE]\n\n')
-          continue
-        }
-
-        try {
-          const parsed = JSON.parse(data)
-          const content = parsed.choices?.[0]?.delta?.content
-          if (content) {
-            res.write(`data: ${JSON.stringify({ content })}\n\n`)
-          }
-        } catch {
-          // Skip unparseable chunks
-        }
-      }
-    }
-
-    res.write('data: [DONE]\n\n')
-    res.end()
-  } catch (err) {
-    console.error('Proxy error:', err)
-    res.status(500).json({ error: 'Internal server error' })
-  }
+interface Env {
+  DEEPSEEK_API_KEY: string
 }
 
-// === Prompt builders (mirrors src/lib/prompt.ts) ===
+export async function onRequest(context: { request: Request; env: Env }) {
+  const { request, env } = context
+
+  // CORS
+  if (request.method === 'OPTIONS') {
+    return new Response(null, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    })
+  }
+
+  if (request.method !== 'POST') {
+    return json({ error: 'Method not allowed' }, 405)
+  }
+
+  let body: { spread?: string; cards?: unknown[] }
+  try {
+    body = await request.json()
+  } catch {
+    return json({ error: 'Invalid JSON body' }, 400)
+  }
+
+  const { spread, cards } = body
+  if (!spread || !cards || !Array.isArray(cards)) {
+    return json({ error: 'Missing spread or cards' }, 400)
+  }
+
+  const apiKey = env.DEEPSEEK_API_KEY
+  if (!apiKey) {
+    return json({ error: 'API Key not configured' }, 500)
+  }
+
+  const systemPrompt = buildSystemPrompt()
+  const userPrompt = buildUserPrompt(spread, cards as CardData[])
+
+  const deepseekResp = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'deepseek-chat',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt },
+      ],
+      stream: true,
+      temperature: 0.8,
+      max_tokens: 2048,
+    }),
+  })
+
+  if (!deepseekResp.ok) {
+    const errText = await deepseekResp.text()
+    return json({ error: `DeepSeek API error: ${errText}` }, deepseekResp.status)
+  }
+
+  // Stream the response
+  return new Response(deepseekResp.body, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': '*',
+    },
+  })
+}
+
+// === Helpers ===
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+    },
+  })
+}
+
+interface CardData {
+  name: string
+  nameEn: string
+  reversed: boolean
+  position: string
+}
 
 function buildSystemPrompt(): string {
   return `你是一位经验丰富的专业塔罗解读师。你擅长结合牌阵位置、正逆位、牌面象征意义进行深度解读。
@@ -119,7 +103,7 @@ function buildSystemPrompt(): string {
 使用 markdown 格式输出。`
 }
 
-function buildUserPrompt(spreadKey: string, cards: Array<{ name: string; nameEn: string; reversed: boolean; position: string }>): string {
+function buildUserPrompt(spreadKey: string, cards: CardData[]): string {
   const spreadNameMap: Record<string, string> = {
     'single': '单张单牌阵',
     'free-three': '无牌阵三张',
@@ -132,6 +116,7 @@ function buildUserPrompt(spreadKey: string, cards: Array<{ name: string; nameEn:
   }
 
   const spreadName = spreadNameMap[spreadKey] || spreadKey
+
   const positionHints: Record<string, Record<string, string>> = {
     'single': { '核心指引': '当前状况的核心信息或建议' },
     'free-three': { '牌一': '第一张牌的综合含义', '牌二': '第二张牌的综合含义', '牌三': '第三张牌的综合含义' },
