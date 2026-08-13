@@ -176,14 +176,15 @@
 
 **拖拽实现要点**：用 `MouseSensor`（`activationConstraint: { distance: 8 }`，鼠标移动 8px 才激活，避免与点击冲突）+ `TouchSensor`（`{ delay: 350, tolerance: 8 }`，长按 350ms 激活，未激活前正常滚动）。`DragOverlay` 渲染跟随指针的浮空牌图。
 
-### 5.5 抽牌模式（洗牌 → 三层卡背 → 拖动抽牌）
+### 5.5 抽牌模式（洗牌 → 扇形开扇 → 划选/拖动抽牌）
 
 `DrawMode.tsx`，与选牌模式共用 @dnd-kit 拖拽套路，差异在抽牌流程：
 
-- **洗牌动画**：点「洗牌」→ `ShuffleVisual` 播放 ~0.9s 洗牌动画（5 张卡背抖动位移/旋转）→ `shuffle(allCards)`（Fisher–Yates）得到随机牌序 → 铺开三层。
-- **三层卡背牌库**：78 张牌按洗牌后顺序切成 3 行（每行 26 张），每行 `overflow-x-auto` 横向滚动。卡背为 CSS 绘制（紫色放射渐变 + 内边框 + ✦ 符号），**无需卡背图片资源**。已抽走的牌在原位留下 `invisible` 占位，牌库位置稳定不回缩。
+- **洗牌动画**：点「洗牌」→ `ShuffleVisual` 播放 ~0.9s 洗牌动画（5 张卡背抖动位移/旋转）→ `shuffle(allCards)`（Fisher–Yates）得到随机牌序 → 扇形铺开。
+- **扇形开扇牌库**：78 张牌以**扇形**铺开（像开扇子）。每张牌绕底部中心原点旋转 `angleOf(i, n)`（总弧角 `TOTAL_ANGLE=132°`，从 `-66°` 到 `+66°`），`transform-origin: bottom center` + `rotate(angle)`，牌底汇聚于容器底部中心、向外辐射。卡背为 CSS 绘制（紫色放射渐变 + 内边框 + ✦ 符号），**无需卡背图片资源**。抽走的牌直接消失，剩余牌**重新均匀分布**角度（`visible = deck.filter(未抽)`，配 `transition: transform` 平滑重排）。
+- **划选悬浮效果**：鼠标飘过（`onMouseEnter`）或手指划过（容器 `onTouchMove`，用 `atan2(dx, dy)` 反推手指角度 → 最近牌 index）时，对应牌沿**径向滑出** `HOVER_LIFT=24px`（`transform: translateY(-lift) rotate(angle)`，径向即旋转后的 -y 轴）+ 亮紫光晕（`CardBack lifted`）+ `z-index` 提升到最前，形成「拨牌」波浪感。
 - **拖动抽牌**：卡背是 `useDraggable`（id `draw-${card.id}`），拖到牌阵 slot（`useDroppable`）后揭示牌面；拖动过程中浮空图显示**卡背**（保持悬念），松手后 slot 用 `rotateY` 翻转动画揭示牌面。
-- **去除/归还**：点已放置的牌可移除，牌会**回到牌库原位**（`placedIds` 由 `slots` 派生，不在 slots 里的牌自动回到牌库）。
+- **去除/归还**：点已放置的牌可移除，牌会**回到扇形**（`placedIds` 由 `slots` 派生，不在 slots 里的牌自动回到 `visible`）。
 - **朝向**：洗牌时每张牌**随机正逆位**（`Math.random() < 0.5`），牌库元素存为 `{ card, reversed }`；卡背状态不显示朝向，翻牌放置时一并揭示（逆位旋转 180° 并标注橙色「逆」）。
 - 放满后点「开始解读」，走与其它模式相同的解读链路。
 
@@ -369,6 +370,7 @@ tarot-note/
 | 2026-08-13 | **功能**：选牌模式加入拖放（@dnd-kit/core）——电脑鼠标拖动、手机长按 350ms 拖动；新增「正位/逆位」全局开关；移除 `SpreadBoard.tsx`（并入 `PickMode.tsx` 的 `useDroppable` slot）。 |
 | 2026-08-13 | **功能**：新增第三个模式「抽牌模式」（`DrawMode.tsx`）——洗牌动画（Framer Motion）→ 78 张牌三层卡背铺开 → 拖动卡背到牌阵翻转揭示；卡背 CSS 绘制无需图片资源。 |
 | 2026-08-13 | **功能**：抽牌模式洗牌时给每张牌**随机正逆位**（50%），翻牌放置时一并揭示（逆位旋转 180° + 橙色「逆」标注）。 |
+| 2026-08-13 | **功能**：抽牌模式牌库改为**扇形开扇**（像开扇子，78 张牌绕底部中心旋转辐射）；新增**划选悬浮**——鼠标飘过 / 手指划过时对应卡牌沿径向滑出并高亮。 |
 
 ---
 
