@@ -7,7 +7,7 @@ interface UseStreamReadingReturn {
   text: string
   streaming: boolean
   error: string | null
-  startReading: (spread: SpreadDef, cards: ParsedCard[]) => Promise<void>
+  startReading: (spread: SpreadDef, cards: ParsedCard[], question?: string) => Promise<void>
   savedId: string | null
 }
 
@@ -17,7 +17,7 @@ export function useStreamReading(): UseStreamReadingReturn {
   const [error, setError] = useState<string | null>(null)
   const [savedId, setSavedId] = useState<string | null>(null)
 
-  const startReading = useCallback(async (spread: SpreadDef, cards: ParsedCard[]) => {
+  const startReading = useCallback(async (spread: SpreadDef, cards: ParsedCard[], question?: string) => {
     setText('')
     setError(null)
     setStreaming(true)
@@ -36,7 +36,7 @@ export function useStreamReading(): UseStreamReadingReturn {
       const response = await fetch('/api/reading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spread: spread.key, cards: flatCards }),
+        body: JSON.stringify({ spread: spread.key, cards: flatCards, question }),
       })
 
       if (!response.ok) {

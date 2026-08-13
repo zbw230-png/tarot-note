@@ -36,7 +36,7 @@ async function handleReading(request, env) {
     return json({ error: 'Invalid JSON body' }, 400)
   }
 
-  const { spread, cards } = body || {}
+  const { spread, cards, question } = body || {}
   if (!spread || !cards || !Array.isArray(cards)) {
     return json({ error: 'Missing spread or cards' }, 400)
   }
@@ -47,7 +47,7 @@ async function handleReading(request, env) {
   }
 
   const systemPrompt = buildSystemPrompt()
-  const userPrompt = buildUserPrompt(spread, cards)
+  const userPrompt = buildUserPrompt(spread, cards, question)
 
   const deepseekResp = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',
@@ -116,7 +116,7 @@ function buildSystemPrompt() {
 请使用中文回复，语言流畅自然，使用 markdown 格式输出。`
 }
 
-function buildUserPrompt(spreadKey, cards) {
+function buildUserPrompt(spreadKey, cards, question) {
   const spreadNameMap = {
     'single': '单张单牌阵',
     'free-three': '无牌阵三张',
@@ -164,7 +164,7 @@ function buildUserPrompt(spreadKey, cards) {
     })
     .join('\n')
 
-  return `请为我解读以下塔罗牌阵：
+  return `${question ? `**你的问题**：${question}\n\n` : ''}请为我解读以下塔罗牌阵：
 
 **牌阵**：${spreadName}（${cards.length} 张牌）
 

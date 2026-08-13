@@ -20,14 +20,15 @@ function App() {
   // Store the cards being read so we can show card info
   const [activeCards, setActiveCards] = useState<ParsedCard[]>([])
   const [hasReading, setHasReading] = useState(false)
+  const [question, setQuestion] = useState('')
 
   const handleReadingStart = useCallback(
     async (cards: ParsedCard[]) => {
       setActiveCards(cards)
       setHasReading(true)
-      await startReading(selectedSpread, cards)
+      await startReading(selectedSpread, cards, question)
     },
-    [selectedSpread, startReading]
+    [selectedSpread, startReading, question]
   )
 
   const handleNewReading = () => {
@@ -97,6 +98,21 @@ function App() {
                 selected={selectedSpread.key}
                 onSelect={setSelectedSpread}
               />
+
+              {/* Question input — shared across all three modes */}
+              <div>
+                <label className="text-sm text-gray-400 mb-1.5 block">
+                  💭 你想问的问题（可选）
+                </label>
+                <input
+                  type="text"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  placeholder="如：这段关系接下来会怎么发展？"
+                  className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-white placeholder-gray-500
+                    focus:outline-none focus:ring-2 focus:ring-purple-500/30 transition"
+                />
+              </div>
 
               {mode === 'quick' ? (
                 <CardInput
