@@ -28,6 +28,7 @@ interface Props {
 interface DeckCard {
   card: TarotCard
   reversed: boolean
+  backIndex: number
 }
 
 // --- Arc carousel constants ---
@@ -75,13 +76,27 @@ function makeRand(seed: number): () => number {
 const NOISE_URI =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"
 
-/** A card back (unified design), with subtle per-card imperfections. */
+/** Available card-back designs (user-supplied), one chosen per shuffle. */
+const CARD_BACKS = [
+  '/cards/back1.jpg',
+  '/cards/back2.jpg',
+  '/cards/back3.jpg',
+  '/cards/back4.jpg',
+  '/cards/back5.jpg',
+  '/cards/back6.jpg',
+  '/cards/back7.jpg',
+  '/cards/back8.jpg',
+]
+
+/** A card back (one design per shuffle), with subtle per-card imperfections. */
 function CardBack({
   lifted = false,
   seed = 0,
+  backIndex = 0,
 }: {
   lifted?: boolean
   seed?: number
+  backIndex?: number
 }) {
   const rand = makeRand(seed)
   const rot = (rand() - 0.5) * 4 // −2°..+2° pattern skew
@@ -99,7 +114,7 @@ function CardBack({
       }`}
     >
       <img
-        src="/cards/back1.jpg"
+        src={CARD_BACKS[backIndex]}
         alt=""
         draggable={false}
         className="absolute inset-0 w-full h-full object-cover select-none"
@@ -166,7 +181,7 @@ function FanCard({
       }}
     >
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
-        <CardBack lifted={lifted} seed={hashSeed(item.card.id)} />
+        <CardBack lifted={lifted} seed={hashSeed(item.card.id)} backIndex={item.backIndex} />
       </motion.div>
     </button>
   )
@@ -326,7 +341,8 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
     setShuffled(false)
     setOffset(0)
     setTimeout(() => {
-      const decked = allCards.map((card) => ({ card, reversed: Math.random() < 0.5 }))
+      const backIndex = Math.floor(Math.random() * CARD_BACKS.length)
+      const decked = allCards.map((card) => ({ card, reversed: Math.random() < 0.5, backIndex }))
       setDeck(shuffle(decked))
       setOffset((decked.length - 1) / 2)
       setShuffling(false)
@@ -495,7 +511,7 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
       <DragOverlay dropAnimation={null}>
         {activeItem ? (
           <div className="w-14 rounded-md overflow-hidden shadow-2xl shadow-black/70">
-            <CardBack seed={hashSeed(activeItem.card.id)} />
+            <CardBack seed={hashSeed(activeItem.card.id)} backIndex={activeItem.backIndex} />
           </div>
         ) : null}
       </DragOverlay>

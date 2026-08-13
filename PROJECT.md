@@ -182,7 +182,7 @@
 
 - **洗牌动画**：点「洗牌」→ `ShuffleVisual` 播放 ~0.9s 洗牌动画（5 张卡背抖动位移/旋转）→ `shuffle(allCards)`（Fisher–Yates）得到随机牌序 → 弧形铺开。
 - **弧形滑动选择器**：78 张牌排布在一条**上凸弧线**上（半径 `R=360`），相邻牌角度差 `STEP_DEG=7°`（牌间**轻微重叠**，像开扇层叠、每张仍露出大部分），**只渲染可视弧窗内的 ~15 张**（`phi ∈ [-45°, +45°]`），其余在屏外。牌位置 `x=R·sin(φ)`、`y=FAN_TOP+R·(1-cos(φ))`，旋转 `φ`、中央牌 `scale=1` 向两侧渐小到 0.7。`offset`（float，牌索引单位）控制弧窗滚动。
-- **统一卡背 + 瑕疵**：卡背用用户提供的单张图（`public/cards/back1.jpg`，1080×1614），全副牌**统一**同一张（8 张随机分配显得花哨，改为统一）。每张牌再用 `hashSeed(card.id)`（FNV-1a）做确定性 PRNG 生成细微差异：图案**旋转偏移 ±2°**、**亮度/对比度/饱和度微差**、**纸张颗粒噪点**（SVG `feTurbulence` + `mix-blend-mode: overlay`）+ 边缘暗角，模拟一副被反复使用过的真牌；选中高亮为暖金色光晕。
+- **卡背（每次洗牌随机一种，全副统一）**：卡背用用户提供的 8 张图（`public/cards/back1..8.jpg`，1080×1614），洗牌时**随机选一种**（`backIndex = Math.floor(Math.random()*8)`），整副牌**统一**用这一种——既避免 8 种混用显花哨，又保留每次洗牌换背的惊喜。每张牌再用 `hashSeed(card.id)`（FNV-1a）做确定性 PRNG 生成细微差异：图案**旋转偏移 ±2°**、**亮度/对比度/饱和度微差**、**纸张颗粒噪点**（SVG `feTurbulence` + `mix-blend-mode: overlay`）+ 边缘暗角，模拟一副被反复使用过的真牌；选中高亮为暖金色光晕。
 - **滑动浏览**：弧形容器加 `touch-none`（`touch-action: none`）阻止浏览器原生滚动/手势，避免滑动牌时页面跟着上下滚。触摸 `onTouchMove` 按 `dx/PIXELS_PER_CARD` 改 `offset`（手指右滑牌向左滚，标准滚动方向）；桌面鼠标滚轮 `onWheel`（`deltaX || deltaY`）同样滚动。`PIXELS_PER_CARD = R·STEP_DEG·π/180 ≈ 94px`。洗牌后 `offset` 初始为 `(deck.length-1)/2`（弧窗居中，左右对称展开）。
 - **中央牌高亮**：中央牌（`round(offset)`）自动高亮浮起（`translateY(-HOVER_LIFT)` + 亮紫光晕 + `z-index` 最高）；桌面 hover 某张牌时优先浮起该牌。抽走的牌直接消失（`visible = deck.filter(未抽)`），`offset` clamp 到 `[0, visible.length-1]`。
 - **拖动抽牌**：卡背是 `useDraggable`（id `draw-${card.id}`），**长按 350ms 激活拖拽**（与滑动浏览区分：快速滑动=浏览，长按=拖走）；拖到牌阵 slot（`useDroppable`）后揭示牌面。拖拽激活后（`activeDragId` 非空）`handleTouchMove` 直接 return，锁定弧不滚。拖动过程中浮空图显示**卡背**，松手后 slot 用 `rotateY` 翻转揭示。
@@ -377,6 +377,7 @@ tarot-note/
 | 2026-08-13 | **优化**：牌间距 15°→7°，牌间**轻微重叠**（开扇层叠感）；卡背改用**真实 RWS 牌背**「Roses and Lilies」（`back.jpg`），每张牌用 `hashSeed` 生成确定性细微瑕疵（图案偏移/色差/纸张颗粒/暗角），选中高亮改暖金色。 |
 | 2026-08-13 | **优化**：卡背换成用户提供的 8 张图片（`back1..8.jpg`），洗牌时每张牌**随机分配**一张卡背；移除旧 RWS「Roses and Lilies」牌背。 |
 | 2026-08-13 | **优化**：卡背由 8 张随机分配**改为统一单张**（`back1.jpg`，删除 back2..8）；弧形容器加 `touch-none` 阻止滑动牌时页面滚动；洗牌后 `offset` 初始居中使弧窗左右对称（修复布局不居中）。 |
+| 2026-08-13 | **优化**：卡背改为**每次洗牌随机选一种**（8 张中随机，全副牌统一），恢复 `back2..8.jpg`；既避免多背混用花哨，又保留每次洗牌换背。 |
 
 ---
 
