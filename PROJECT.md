@@ -247,29 +247,49 @@ interface ParsedCard {
 
 ## 10. 部署配置
 
-### Vercel 环境变量
+### 部署平台：Cloudflare Workers
+
+> Vercel 的 `*.vercel.app` 域名在国内被墙，改用 Cloudflare Workers（`*.workers.dev` 可访问）。
+
+**线上地址**：https://tarot-note2.zbw230.workers.dev/
+
+### 环境变量
+
+在 Cloudflare Dashboard → Settings → Variables and Secrets 设置：
+
+| 名称 | 说明 |
+|---|---|
+| `DEEPSEEK_API_KEY` | DeepSeek API Key（需设置在生产环境 Production） |
+
+### 构建配置
+
+| 字段 | 值 |
+|---|---|
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Version command | `npx wrangler versions upload` |
+| Root directory | `/` |
+
+### 项目结构（Workers 版本）
 
 ```
-DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
+tarot-note/
+├── worker.js              # Workers 入口：API 代理 + 静态资源
+├── wrangler.toml          # Workers 配置（assets 指向 ./dist）
+├── src/                   # 前端源码（Vite + React）
+└── dist/                  # 构建产物（由 npm run build 生成）
 ```
-
-### 部署流程
-
-1. 代码推送到 GitHub 仓库
-2. Vercel 连接仓库，自动识别 Vite 项目
-3. 设置环境变量
-4. 自动部署，获得 `https://xxx.vercel.app` 域名
-5. 微信中直接打开链接即可使用
 
 ---
 
-## 11. 待用户准备
+## 11. 完成状态
 
 | 事项 | 状态 |
 |---|---|
-| DeepSeek API Key | ✅ 已有 |
-| GitHub 账号 | ❓ 待确认 |
-| Vercel 账号 | ❓ 待确认 |
+| DeepSeek API Key | ✅ 已配置 |
+| GitHub 仓库 | ✅ zbw230-png/tarot-note |
+| Cloudflare 部署 | ✅ tarot-note2.zbw230.workers.dev |
+| AI 解读接口 | ✅ 已打通（流式返回） |
 
 ---
 
@@ -278,4 +298,6 @@ DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxx
 | 日期 | 更新内容 |
 |---|---|
 | 2026-08-12 | 初始文档，完成需求分析与技术方案设计 |
-| 2026-08-12 | **代码完成**：项目初始化、数据层（卡牌/解析器/牌阵/存储/Prompt）、6个 UI 组件、流式 API + Hook、App 主页面串联。TypeScript 编译 + Vite 生产构建通过。 |
+| 2026-08-12 | **代码完成**：项目初始化、数据层、UI 组件、流式 API、App 串联。构建通过。 |
+| 2026-08-12 | **部署**：迁移到 Cloudflare Workers（Vercel 被墙）。新增 `worker.js` + `wrangler.toml`。 |
+| 2026-08-12 | **修复**：SSE 流式解析改为 DeepSeek OpenAI 兼容格式（`choices[0].delta.content`）。API 实测返回正常中文解读。 |
