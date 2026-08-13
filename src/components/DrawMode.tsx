@@ -32,7 +32,7 @@ interface DeckCard {
 
 // --- Arc carousel constants ---
 const FAN_W = 56 // px, card width
-const STEP_DEG = 15 // degrees between adjacent cards (visible gap)
+const STEP_DEG = 7 // degrees between adjacent cards (a bit of fan overlap)
 const VISIBLE_ANGLE = 45 // half-angle of the visible arc window
 const R = 360 // arc radius, px
 const HOVER_LIFT = 16 // px, lift of the highlighted center card
@@ -52,22 +52,64 @@ function shuffle<T>(arr: T[]): T[] {
   return a
 }
 
-/** The face-down card back (CSS-drawn, no asset needed). */
-function CardBack({ lifted = false }: { lifted?: boolean }) {
+/** Deterministic hash (FNV-1a) from a card id → integer seed. */
+function hashSeed(str: string): number {
+  let h = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+/** Small deterministic PRNG for per-card imperfections. */
+function makeRand(seed: number): () => number {
+  let s = (seed % 233280) + 1
+  return () => {
+    s = (s * 9301 + 49297) % 233280
+    return s / 233280
+  }
+}
+
+/** SVG turbulence noise (grayscale) for a paper-grain overlay. */
+const NOISE_URI =
+  "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")"
+
+/** The Rider–Waite card back, with subtle per-card imperfections. */
+function CardBack({ lifted = false, seed = 0 }: { lifted?: boolean; seed?: number }) {
+  const rand = makeRand(seed)
+  const rot = (rand() - 0.5) * 4 // −2°..+2° pattern skew
+  const bright = 0.96 + rand() * 0.08 // slight color variance
+  const contrast = 0.97 + rand() * 0.06
+  const saturate = 0.92 + rand() * 0.14
+  const grain = 0.05 + rand() * 0.06 // paper grain strength
+
   return (
     <div
       className={`relative w-full aspect-[7/12] rounded-md overflow-hidden border shadow-md transition-colors ${
         lifted
-          ? 'border-purple-300/80 shadow-lg shadow-purple-500/40 ring-2 ring-purple-400/50'
-          : 'border-purple-400/40'
+          ? 'border-amber-300/80 shadow-lg shadow-amber-500/30 ring-2 ring-amber-300/60'
+          : 'border-black/40'
       }`}
-      style={{ background: 'radial-gradient(circle at 50% 38%, #44397d 0%, #2a2450 55%, #18143a 100%)' }}
     >
-      <div className="absolute inset-[6%] rounded-[4px] border border-purple-300/25" />
-      <div className="absolute inset-[12%] rounded-[4px] border border-purple-300/15" />
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-purple-200/60 text-xl leading-none select-none">✦</span>
-      </div>
+      <img
+        src="/cards/back.jpg"
+        alt=""
+        draggable={false}
+        className="absolute inset-0 w-full h-full object-cover select-none"
+        style={{
+          transform: `rotate(${rot}deg) scale(1.06)`,
+          filter: `brightness(${bright}) contrast(${contrast}) saturate(${saturate})`,
+        }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ opacity: grain, backgroundImage: NOISE_URI, mixBlendMode: 'overlay' }}
+      />
+      <div
+        className="absolute inset-0 pointer-events-none rounded-md"
+        style={{ boxShadow: 'inset 0 0 10px rgba(0,0,0,0.4)' }}
+      />
     </div>
   )
 }
@@ -118,7 +160,7 @@ function FanCard({
       }}
     >
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
-        <CardBack lifted={lifted} />
+        <CardBack lifted={lifted} seed={hashSeed(item.card.id)} />
       </motion.div>
     </button>
   )
@@ -446,7 +488,7 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
       <DragOverlay dropAnimation={null}>
         {activeItem ? (
           <div className="w-14 rounded-md overflow-hidden shadow-2xl shadow-black/70">
-            <CardBack />
+            <CardBack seed={hashSeed(activeItem.card.id)} />
           </div>
         ) : null}
       </DragOverlay>
