@@ -47,23 +47,23 @@ export function useStreamReading(): UseStreamReadingReturn {
         if (done) break
 
         const chunk = decoder.decode(value, { stream: true })
-        // Handle SSE format
+        // Handle SSE format (DeepSeek OpenAI-compatible stream)
+        // Each line: `data: {"choices":[{"delta":{"content":"..."}}]}`
         const lines = chunk.split('\n')
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = line.slice(6)
-            if (data === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(data)
-              if (parsed.content) {
-                fullText += parsed.content
-                setText(fullText)
-              }
-            } catch {
-              // Plain text chunk (non-JSON)
-              fullText += data
+          const trimmed = line.trim()
+          if (!trimmed.startsWith('data:')) continue
+          const data = trimmed.slice(5).trim()
+          if (!data || data === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(data)
+            const content = parsed.choices?.[0]?.delta?.content
+            if (content) {
+              fullText += content
               setText(fullText)
             }
+          } catch {
+            // Skip unparseable chunks
           }
         }
       }
