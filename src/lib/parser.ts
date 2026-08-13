@@ -100,3 +100,8 @@ export function summarizeCards(cards: ParsedCard[]): string {
     })
     .join('、')
 }
+
+/** Build a ParsedCard directly from a TarotCard (used by pick mode, no text input). */
+export function makeParsedCard(card: TarotCard, reversed: boolean): ParsedCard {
+  return { input: '', arcana: card.arcana, reversed, number: card.number, suit: card.suit, card }
+}

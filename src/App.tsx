@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import './App.css'
 import SpreadSelector from './components/SpreadSelector'
 import CardInput from './components/CardInput'
+import PickMode from './components/PickMode'
 import ReadingResult from './components/ReadingResult'
 import HistoryList from './components/HistoryList'
 import { spreads, type SpreadDef } from './lib/spreads'
@@ -11,6 +12,7 @@ import { BookOpen } from 'lucide-react'
 
 function App() {
   const [view, setView] = useState<'reading' | 'history'>('reading')
+  const [mode, setMode] = useState<'pick' | 'quick'>('quick')
   const [selectedSpread, setSelectedSpread] = useState<SpreadDef>(spreads[0])
   const { text, streaming, error, startReading } = useStreamReading()
 
@@ -62,16 +64,44 @@ function App() {
           {/* Step 1: Select spread */}
           {!hasReading && (
             <>
+              {/* Mode toggle */}
+              <div className="flex bg-gray-800 rounded-xl p-1">
+                <button
+                  onClick={() => setMode('pick')}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
+                    mode === 'pick' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  🃏 选牌模式
+                </button>
+                <button
+                  onClick={() => setMode('quick')}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
+                    mode === 'quick' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  ⌨️ 快速输入
+                </button>
+              </div>
+
               <SpreadSelector
                 selected={selectedSpread.key}
                 onSelect={setSelectedSpread}
               />
 
-              <CardInput
-                spread={selectedSpread}
-                onReadingStart={handleReadingStart}
-                disabled={streaming}
-              />
+              {mode === 'quick' ? (
+                <CardInput
+                  spread={selectedSpread}
+                  onReadingStart={handleReadingStart}
+                  disabled={streaming}
+                />
+              ) : (
+                <PickMode
+                  spread={selectedSpread}
+                  onReadingStart={handleReadingStart}
+                  disabled={streaming}
+                />
+              )}
             </>
           )}
 

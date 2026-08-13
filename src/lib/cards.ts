@@ -157,3 +157,20 @@ export function getCardImage(card: TarotCard): string {
   const prefix = SUIT_IMG_PREFIX[card.suitEn || ''] || 'w'
   return `/cards/${prefix}${String(card.number).padStart(2, '0')}.jpg`
 }
+
+// === Categories (for the card-picker mode) ===
+export type CardCategory = 'major' | 'wands' | 'cups' | 'swords' | 'pentacles'
+
+export const cardCategories: { key: CardCategory; label: string }[] = [
+  { key: 'major', label: '大阿卡纳' },
+  { key: 'wands', label: '权杖' },
+  { key: 'cups', label: '圣杯' },
+  { key: 'swords', label: '宝剑' },
+  { key: 'pentacles', label: '星币' },
+]
+
+/** All cards in a given category, in deck order. */
+export function getCardsByCategory(cat: CardCategory): TarotCard[] {
+  if (cat === 'major') return allCards.filter((c) => c.arcana === 'major')
+  return allCards.filter((c) => c.suitEn?.toLowerCase() === cat)
+}
