@@ -301,3 +301,91 @@ tarot-note/
 | 2026-08-12 | **代码完成**：项目初始化、数据层、UI 组件、流式 API、App 串联。构建通过。 |
 | 2026-08-12 | **部署**：迁移到 Cloudflare Workers（Vercel 被墙）。新增 `worker.js` + `wrangler.toml`。 |
 | 2026-08-12 | **修复**：SSE 流式解析改为 DeepSeek OpenAI 兼容格式（`choices[0].delta.content`）。API 实测返回正常中文解读。 |
+
+---
+
+## 13. 踩坑记录（务必阅读，避免重蹈覆辙）
+
+本次部署踩了 6 个坑，耗时最长的是坑 #4。以后做"国内手机可访问的 AI Web 应用"务必按此避坑。
+
+### 坑 #1：Vercel 域名国内被墙 ❌
+
+**现象**：部署成功后 `*.vercel.app` 打开显示"无法访问"。
+
+**原因**：Vercel 默认域名被 GFW 屏蔽。
+
+**解决**：改用 **Cloudflare Workers**（`*.workers.dev` 域名国内可访问），同样免费、支持 Git 自动部署 + Serverless 函数。
+
+**教训**：面向国内用户的应用，部署平台首选 Cloudflare（Workers/Pages），不要用 Vercel。
+
+### 坑 #2：Cloudflare Pages 和 Workers 的目录结构不同 ⚠️
+
+**现象**：用 Pages 的 `functions/` 目录格式部署到 Workers，API 返回 405。
+
+**原因**：
+- **Pages** 用 `functions/api/xxx.js` 目录约定（`onRequest` 导出）
+- **Workers** 用 `worker.js` 入口 + `wrangler.toml` 配置
+
+**解决**：写 `worker.js`（`export default { fetch() }`）+ `wrangler.toml`（`[assets]` 指向 `./dist`）。
+
+**教训**：先搞清楚项目是 Pages 还是 Workers 类型（看 URL 后缀 `.pages.dev` vs `.workers.dev`），再决定代码结构。
+
+### 坑 #3：构建产物目录填错字段 ❌
+
+**现象**：构建日志报 `dist: not found`。
+
+**原因**：把 `dist`（输出目录）填进了 "Deploy command" 字段，Cloudflare 当成 shell 命令执行。
+
+**解决**：Workers 的正确构建配置是：
+```
+Build command:   npm run build
+Deploy command:  npx wrangler deploy   ← 不是 dist！
+```
+输出目录 `dist` 由 `wrangler.toml` 的 `[assets] directory` 声明，不需要单独填。
+
+### 坑 #4：环境变量作用域（本次最耗时）⏱️
+
+**现象**：API 一直返回 `"API Key not configured"`，排查了很久。
+
+**原因**：`DEEPSEEK_API_KEY` 加在了 Cloudflare 的 **Preview** 环境，而 `.workers.dev` 生产域名只读 **Production** 环境的变量。
+
+**解决**：在 Settings → Variables and Secrets 里把变量的环境改成 **Production**，然后重新部署。
+
+**教训**：Cloudflare 的 Variables/Secrets 分 Preview 和 Production 两个作用域，**改完变量必须重新部署才生效**。排查"环境变量读不到"时，第一件事就是确认作用域。
+
+### 坑 #5：DeepSeek 流式响应格式 ⚠️
+
+**现象**：后端能拿到流式数据，但前端白屏/不显示文字。
+
+**原因**：前端把 SSE 内容解析成 `parsed.content`，但 DeepSeek（OpenAI 兼容格式）实际返回：
+```json
+{"choices":[{"delta":{"content":"..."}}]}
+```
+内容在 `choices[0].delta.content`，不是顶层 `content`。
+
+**解决**：前端解析改成 `parsed.choices?.[0]?.delta?.content`。
+
+**教训**：接入 LLM 流式接口前，先用 curl 看一次真实返回格式，别凭记忆写解析逻辑。
+
+### 坑 #6：GitHub 用户名大小写 ⚠️
+
+**现象**：`git push` 报 "Repository not found"。
+
+**原因**：remote URL 里用户名写成了大写 `ZBW-230-PNG`，实际是小写 `zbw230-png`。
+
+**解决**：`git remote set-url origin` 改成正确大小写。
+
+**教训**：GitHub 用户名区分大小写，拿不准就从浏览器地址栏复制完整 URL。
+
+---
+
+## 14. 复刻模板：国内可访问的 AI Web 应用速查
+
+下次做类似项目，直接按这个清单走：
+
+1. **技术栈**：React + Vite + Tailwind + 国内大模型 API（DeepSeek/通义等）
+2. **部署**：Cloudflare Workers（`wrangler.toml` + `worker.js`），GitHub 自动部署
+3. **AI 代理**：Worker 里 `fetch` 转发到 LLM API，SSE 直接透传
+4. **密钥**：Cloudflare Dashboard → Variables and Secrets → 设 Production 作用域 → 重新部署
+5. **流式解析**：先 curl 看真实返回格式，OpenAI 兼容格式取 `choices[0].delta.content`
+6. **验证**：curl 测 API 是否 200 + 是否有 `data:` 流，再让用户微信实测
