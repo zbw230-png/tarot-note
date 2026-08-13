@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import type { SpreadDef } from '../lib/spreads'
 import { parseCards, summarizeCards } from '../lib/parser'
+import SpreadLayout from './SpreadLayout'
 
 interface Props {
   spread: SpreadDef
@@ -99,6 +100,23 @@ export default function CardInput({ spread, onReadingStart, disabled }: Props) {
           )}
         </div>
       </div>
+
+      {/* Live card preview — updates in real time as the user types */}
+      {parsed.length > 0 && (
+        <div>
+          <p className="text-xs text-gray-500 mb-2">
+            牌阵预览
+            <span className={isValid ? ' text-green-400' : ' text-yellow-400'}>
+              {cardCount}/{expectedCount}
+            </span>
+          </p>
+          <SpreadLayout
+            spread={spread}
+            cards={parsed.slice(0, spread.cardCount)}
+            animated={false}
+          />
+        </div>
+      )}
 
       {/* Submit button */}
       <button

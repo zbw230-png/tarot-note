@@ -7,6 +7,7 @@ import { getLayout, type LayoutSpot } from '../lib/layouts'
 interface Props {
   spread: SpreadDef
   cards: ParsedCard[]
+  animated?: boolean  // default true; false = render instantly (live typing preview)
 }
 
 const CARD_W = 56 // px
@@ -15,7 +16,7 @@ const CARD_W = 56 // px
  * Renders the drawn cards as Rider-Waite images, positioned according to the
  * selected spread's shape (line / triangle / fork / cross / Celtic Cross ...).
  */
-export default function SpreadLayout({ spread, cards }: Props) {
+export default function SpreadLayout({ spread, cards, animated = true }: Props) {
   const layout = getLayout(spread.key)
 
   return (
@@ -42,9 +43,9 @@ export default function SpreadLayout({ spread, cards }: Props) {
             }}
           >
             <motion.div
-              initial={{ opacity: 0, scale: 0.6, y: 8 }}
+              initial={animated ? { opacity: 0, scale: 0.6, y: 8 } : false}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              transition={{ delay: i * 0.08, duration: 0.35 }}
+              transition={animated ? { delay: i * 0.08, duration: 0.35 } : { duration: 0 }}
               className="relative w-full rounded-md overflow-hidden shadow-lg shadow-black/60 border border-white/15 bg-black/40"
             >
               <img
