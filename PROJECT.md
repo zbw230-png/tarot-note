@@ -176,15 +176,16 @@
 
 **拖拽实现要点**：用 `MouseSensor`（`activationConstraint: { distance: 8 }`，鼠标移动 8px 才激活，避免与点击冲突）+ `TouchSensor`（`{ delay: 350, tolerance: 8 }`，长按 350ms 激活，未激活前正常滚动）。`DragOverlay` 渲染跟随指针的浮空牌图。
 
-### 5.5 抽牌模式（洗牌 → 扇形开扇 → 划选/拖动抽牌）
+### 5.5 抽牌模式（洗牌 → 弧形滑动选择 → 拖动抽牌）
 
 `DrawMode.tsx`，与选牌模式共用 @dnd-kit 拖拽套路，差异在抽牌流程：
 
-- **洗牌动画**：点「洗牌」→ `ShuffleVisual` 播放 ~0.9s 洗牌动画（5 张卡背抖动位移/旋转）→ `shuffle(allCards)`（Fisher–Yates）得到随机牌序 → 扇形铺开。
-- **扇形开扇牌库**：78 张牌以**扇形**铺开（像开扇子）。每张牌绕底部中心原点旋转 `angleOf(i, n)`（总弧角 `TOTAL_ANGLE=132°`，从 `-66°` 到 `+66°`），`transform-origin: bottom center` + `rotate(angle)`，牌底汇聚于容器底部中心、向外辐射。卡背为 CSS 绘制（紫色放射渐变 + 内边框 + ✦ 符号），**无需卡背图片资源**。抽走的牌直接消失，剩余牌**重新均匀分布**角度（`visible = deck.filter(未抽)`，配 `transition: transform` 平滑重排）。
-- **划选悬浮效果**：鼠标飘过（`onMouseEnter`）或手指划过（容器 `onTouchMove`，用 `atan2(dx, dy)` 反推手指角度 → 最近牌 index）时，对应牌沿**径向滑出** `HOVER_LIFT=24px`（`transform: translateY(-lift) rotate(angle)`，径向即旋转后的 -y 轴）+ 亮紫光晕（`CardBack lifted`）+ `z-index` 提升到最前，形成「拨牌」波浪感。
-- **拖动抽牌**：卡背是 `useDraggable`（id `draw-${card.id}`），拖到牌阵 slot（`useDroppable`）后揭示牌面；拖动过程中浮空图显示**卡背**（保持悬念），松手后 slot 用 `rotateY` 翻转动画揭示牌面。
-- **去除/归还**：点已放置的牌可移除，牌会**回到扇形**（`placedIds` 由 `slots` 派生，不在 slots 里的牌自动回到 `visible`）。
+- **洗牌动画**：点「洗牌」→ `ShuffleVisual` 播放 ~0.9s 洗牌动画（5 张卡背抖动位移/旋转）→ `shuffle(allCards)`（Fisher–Yates）得到随机牌序 → 弧形铺开。
+- **弧形滑动选择器**：78 张牌排布在一条**上凸弧线**上（半径 `R=360`），相邻牌角度差 `STEP_DEG=15°`（间距明显，每张牌露出清楚），**只渲染可视弧窗内的 ~9 张**（`phi ∈ [-45°, +45°]`），其余在屏外。牌位置 `x=R·sin(φ)`、`y=FAN_TOP+R·(1-cos(φ))`，旋转 `φ`、中央牌 `scale=1` 向两侧渐小到 0.7。`offset`（float，牌索引单位）控制弧窗滚动。
+- **滑动浏览**：触摸 `onTouchMove` 按 `dx/PIXELS_PER_CARD` 改 `offset`（手指右滑牌向左滚，标准滚动方向）；桌面鼠标滚轮 `onWheel`（`deltaX || deltaY`）同样滚动。`PIXELS_PER_CARD = R·STEP_DEG·π/180 ≈ 94px`。
+- **中央牌高亮**：中央牌（`round(offset)`）自动高亮浮起（`translateY(-HOVER_LIFT)` + 亮紫光晕 + `z-index` 最高）；桌面 hover 某张牌时优先浮起该牌。抽走的牌直接消失（`visible = deck.filter(未抽)`），`offset` clamp 到 `[0, visible.length-1]`。
+- **拖动抽牌**：卡背是 `useDraggable`（id `draw-${card.id}`），**长按 350ms 激活拖拽**（与滑动浏览区分：快速滑动=浏览，长按=拖走）；拖到牌阵 slot（`useDroppable`）后揭示牌面。拖拽激活后（`activeDragId` 非空）`handleTouchMove` 直接 return，锁定弧不滚。拖动过程中浮空图显示**卡背**，松手后 slot 用 `rotateY` 翻转揭示。
+- **去除/归还**：点已放置的牌可移除，牌会**回到弧形**（`placedIds` 由 `slots` 派生，不在 slots 里的牌自动回到 `visible`）。
 - **朝向**：洗牌时每张牌**随机正逆位**（`Math.random() < 0.5`），牌库元素存为 `{ card, reversed }`；卡背状态不显示朝向，翻牌放置时一并揭示（逆位旋转 180° 并标注橙色「逆」）。
 - 放满后点「开始解读」，走与其它模式相同的解读链路。
 
@@ -371,6 +372,7 @@ tarot-note/
 | 2026-08-13 | **功能**：新增第三个模式「抽牌模式」（`DrawMode.tsx`）——洗牌动画（Framer Motion）→ 78 张牌三层卡背铺开 → 拖动卡背到牌阵翻转揭示；卡背 CSS 绘制无需图片资源。 |
 | 2026-08-13 | **功能**：抽牌模式洗牌时给每张牌**随机正逆位**（50%），翻牌放置时一并揭示（逆位旋转 180° + 橙色「逆」标注）。 |
 | 2026-08-13 | **功能**：抽牌模式牌库改为**扇形开扇**（像开扇子，78 张牌绕底部中心旋转辐射）；新增**划选悬浮**——鼠标飘过 / 手指划过时对应卡牌沿径向滑出并高亮。 |
+| 2026-08-13 | **优化**：抽牌模式改为**弧形滑动选择器**——牌沿上凸弧线排布（相邻 15°、每张牌露出清楚），只渲染可视 ~9 张（解决卡顿），左右滑动/滚轮沿弧滚动浏览，中央牌自动高亮；长按拖拽与滑动浏览区分。 |
 
 ---
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import type { TouchEvent as ReactTouchEvent } from 'react'
+import type { TouchEvent as ReactTouchEvent, WheelEvent as ReactWheelEvent } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -30,17 +30,17 @@ interface DeckCard {
   reversed: boolean
 }
 
-// --- Fan layout constants ---
-const FAN_W = 48 // px, card width in the fan
-const TOTAL_ANGLE = 132 // degrees, total fan spread (-half .. +half)
-const HOVER_LIFT = 24 // px, radial lift when hovered
+// --- Arc carousel constants ---
+const FAN_W = 56 // px, card width
+const STEP_DEG = 15 // degrees between adjacent cards (visible gap)
+const VISIBLE_ANGLE = 45 // half-angle of the visible arc window
+const R = 360 // arc radius, px
+const HOVER_LIFT = 16 // px, lift of the highlighted center card
+const FAN_TOP = 70 // px, y of the center card's midpoint from container top
 const SLOT_W = 56 // px, spread slot width
 
-/** Angle (degrees) of the i-th card out of n, centered around 0. */
-function angleOf(i: number, n: number): number {
-  if (n <= 1) return 0
-  return -TOTAL_ANGLE / 2 + (i / (n - 1)) * TOTAL_ANGLE
-}
+const RAD = Math.PI / 180
+const PIXELS_PER_CARD = R * STEP_DEG * RAD // horizontal distance per card at the center
 
 /** Fisher–Yates shuffle (browser Math.random is fine here). */
 function shuffle<T>(arr: T[]): T[] {
@@ -72,24 +72,30 @@ function CardBack({ lifted = false }: { lifted?: boolean }) {
   )
 }
 
-/** A draggable card in the fan (rotated around the bottom-center origin). */
+/** A draggable card on the arc. */
 function FanCard({
   item,
-  angle,
-  hovered,
+  phi,
+  x,
+  y,
+  scale,
+  lifted,
   onHover,
   onLeave,
 }: {
   item: DeckCard
-  angle: number
-  hovered: boolean
+  phi: number
+  x: number
+  y: number
+  scale: number
+  lifted: boolean
   onHover: () => void
   onLeave: () => void
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `draw-${item.card.id}`,
   })
-  const lift = hovered ? HOVER_LIFT : 0
+  const lift = lifted ? HOVER_LIFT : 0
 
   return (
     <button
@@ -101,22 +107,18 @@ function FanCard({
       onMouseLeave={onLeave}
       className="absolute cursor-grab active:cursor-grabbing"
       style={{
-        left: `calc(50% - ${FAN_W / 2}px)`,
-        bottom: 0,
+        left: `calc(50% + ${x}px)`,
+        top: `${y}px`,
         width: FAN_W,
-        transformOrigin: 'bottom center',
-        transform: `translateY(${-lift}px) rotate(${angle}deg)`,
-        zIndex: hovered ? 200 : Math.round(100 - Math.abs(angle)),
-        transition: 'transform 0.16s ease',
+        transform: `translate(-50%, -50%) rotate(${phi}deg) scale(${scale}) translateY(${-lift}px)`,
+        zIndex: lifted ? 300 : Math.round(100 - Math.abs(phi)),
+        transition: 'transform 0.15s ease',
         opacity: isDragging ? 0.3 : 1,
+        willChange: 'transform',
       }}
     >
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: Math.min(item.card.number * 0.006, 0.4), duration: 0.25 }}
-      >
-        <CardBack lifted={hovered} />
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
+        <CardBack lifted={lifted} />
       </motion.div>
     </button>
   )
@@ -195,7 +197,7 @@ function Slot({
   )
 }
 
-/** Shuffle animation: a few card backs jittering, then settle into the fan. */
+/** Shuffle animation: a few card backs jittering, then settle into the arc. */
 function ShuffleVisual() {
   const offsets = [-30, -15, 0, 15, 30]
   return (
@@ -223,10 +225,10 @@ function ShuffleVisual() {
 }
 
 /**
- * Draw mode: shuffle the deck, fan the cards out face-down like an opened fan,
+ * Draw mode: shuffle the deck, lay cards out face-down along a scrollable arc,
  * then drag face-down cards onto the spread. Each card carries a random
- * orientation assigned at shuffle time, revealed only when placed. Hovering
- * (mouse) or swiping across (touch) lifts the card under the cursor/finger.
+ * orientation assigned at shuffle time, revealed only when placed. Swipe
+ * (touch) / scroll (wheel) to browse the arc; the center card is highlighted.
  */
 export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
   const [deck, setDeck] = useState<DeckCard[]>([])
@@ -237,7 +239,8 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
   const [shuffled, setShuffled] = useState(false)
   const [activeDragId, setActiveDragId] = useState<string | null>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const fanRef = useRef<HTMLDivElement>(null)
+  const [offset, setOffset] = useState(0)
+  const lastXRef = useRef<number | null>(null)
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
@@ -250,6 +253,7 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
     setShuffled(false)
     setShuffling(false)
     setHoverIndex(null)
+    setOffset(0)
   }, [spread.key, spread.cardCount])
 
   const placedIds = new Set(slots.filter(Boolean).map((c) => c!.card.id))
@@ -260,10 +264,19 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
       ? deck.find((d) => `draw-${d.card.id}` === activeDragId) ?? null
       : null
 
+  const centerIndex = Math.round(offset)
+  const liftedIndex = hoverIndex ?? centerIndex
+
+  const clampOffset = (v: number) => {
+    const max = Math.max(0, visible.length - 1)
+    return Math.min(max, Math.max(0, v))
+  }
+
   const handleShuffle = () => {
     setShuffling(true)
     setSlots(Array(spread.cardCount).fill(null))
     setShuffled(false)
+    setOffset(0)
     setTimeout(() => {
       const decked = allCards.map((card) => ({ card, reversed: Math.random() < 0.5 }))
       setDeck(shuffle(decked))
@@ -308,27 +321,28 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
     onReadingStart(slots.map((s) => makeParsedCard(s!.card, s!.reversed)))
   }
 
-  // Map a touch point to the nearest card in the fan (for the swipe-lift effect).
-  const handleTouchMove = (e: ReactTouchEvent) => {
-    if (activeDragId || !fanRef.current) return
-    const n = visible.length
-    if (n === 0) return
-    const touch = e.touches[0]
-    const rect = fanRef.current.getBoundingClientRect()
-    const cx = rect.left + rect.width / 2
-    const cy = rect.bottom
-    const dx = touch.clientX - cx
-    const dy = cy - touch.clientY
-    if (Math.hypot(dx, dy) < 1) return
-
-    const half = TOTAL_ANGLE / 2
-    let angle = (Math.atan2(dx, dy) * 180) / Math.PI
-    angle = Math.max(-half, Math.min(half, angle))
-    const idx = n <= 1 ? 0 : Math.round(((angle + half) / TOTAL_ANGLE) * (n - 1))
-    setHoverIndex(idx)
+  // --- Arc browsing (touch swipe / mouse wheel) ---
+  const handleTouchStart = (e: ReactTouchEvent) => {
+    lastXRef.current = e.touches[0].clientX
   }
-
-  const clearHover = () => setHoverIndex(null)
+  const handleTouchMove = (e: ReactTouchEvent) => {
+    if (activeDragId) return
+    const touch = e.touches[0]
+    if (lastXRef.current == null) {
+      lastXRef.current = touch.clientX
+      return
+    }
+    const dx = touch.clientX - lastXRef.current
+    lastXRef.current = touch.clientX
+    if (dx !== 0) setOffset((prev) => clampOffset(prev - dx / PIXELS_PER_CARD))
+  }
+  const handleTouchEnd = () => {
+    lastXRef.current = null
+  }
+  const handleWheel = (e: ReactWheelEvent) => {
+    const delta = e.deltaX || e.deltaY
+    if (delta !== 0) setOffset((prev) => clampOffset(prev + delta / PIXELS_PER_CARD))
+  }
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -345,37 +359,49 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
           </button>
           {shuffled && !shuffling && (
             <span className="text-xs text-gray-500">
-              划选 / 拖动 {spread.cardCount} 张卡到牌阵
+              左右滑动浏览，拖动 {spread.cardCount} 张到牌阵
             </span>
           )}
         </div>
 
-        {/* Shuffle animation / fan */}
+        {/* Shuffle animation / arc carousel */}
         {shuffling ? (
           <ShuffleVisual />
         ) : shuffled ? (
           <div
-            ref={fanRef}
-            className="relative w-full h-[140px] overflow-visible"
+            className="relative w-full h-[240px] overflow-visible select-none"
+            onTouchStart={handleTouchStart}
             onTouchMove={handleTouchMove}
-            onTouchEnd={clearHover}
-            onTouchCancel={clearHover}
-            onMouseLeave={clearHover}
+            onTouchEnd={handleTouchEnd}
+            onTouchCancel={handleTouchEnd}
+            onWheel={handleWheel}
+            onMouseLeave={() => setHoverIndex(null)}
           >
-            {visible.map((item, i) => (
-              <FanCard
-                key={item.card.id}
-                item={item}
-                angle={angleOf(i, visible.length)}
-                hovered={hoverIndex === i}
-                onHover={() => setHoverIndex(i)}
-                onLeave={clearHover}
-              />
-            ))}
+            {visible.map((item, i) => {
+              const phi = (i - offset) * STEP_DEG
+              if (phi < -VISIBLE_ANGLE - STEP_DEG || phi > VISIBLE_ANGLE + STEP_DEG) return null
+              const rad = phi * RAD
+              const x = R * Math.sin(rad)
+              const y = FAN_TOP + R * (1 - Math.cos(rad))
+              const scale = 1 - (Math.abs(phi) / VISIBLE_ANGLE) * 0.3
+              return (
+                <FanCard
+                  key={item.card.id}
+                  item={item}
+                  phi={phi}
+                  x={x}
+                  y={y}
+                  scale={scale}
+                  lifted={i === liftedIndex}
+                  onHover={() => setHoverIndex(i)}
+                  onLeave={() => setHoverIndex(null)}
+                />
+              )
+            })}
           </div>
         ) : (
           <div className="py-10 text-center text-gray-500">
-            <p className="text-sm">点击「洗牌」洗好牌后，从扇形卡背中抽出你的牌</p>
+            <p className="text-sm">点击「洗牌」洗好牌后，从弧形卡背中抽出你的牌</p>
           </div>
         )}
 
