@@ -136,3 +136,24 @@ export function findCard(
 export function getCardName(id: string): string {
   return allCards.find((c) => c.id === id)?.name || id
 }
+
+// Image filename prefix per suit (matches Rider-Waite scans in public/cards/)
+const SUIT_IMG_PREFIX: Record<string, string> = {
+  Wands: 'w',
+  Cups: 'c',
+  Swords: 's',
+  Pentacles: 'p',
+}
+
+/**
+ * Get the local image path for a card.
+ * Major: /cards/m00.jpg ~ /cards/m21.jpg
+ * Minor: /cards/{w|c|s|p}01.jpg ~ {prefix}14.jpg
+ */
+export function getCardImage(card: TarotCard): string {
+  if (card.arcana === 'major') {
+    return `/cards/m${String(card.number).padStart(2, '0')}.jpg`
+  }
+  const prefix = SUIT_IMG_PREFIX[card.suitEn || ''] || 'w'
+  return `/cards/${prefix}${String(card.number).padStart(2, '0')}.jpg`
+}

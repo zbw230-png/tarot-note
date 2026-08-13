@@ -2,7 +2,7 @@ import { useRef, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import type { ParsedCard } from '../lib/parser'
 import type { SpreadDef } from '../lib/spreads'
-import ReadingCard from './ReadingCard'
+import SpreadLayout from './SpreadLayout'
 
 interface Props {
   spread: SpreadDef
@@ -21,16 +21,7 @@ export default function ReadingResult({ spread, cards, text, streaming }: Props)
     }
   }, [text, streaming])
 
-  if (!text && streaming) {
-    return (
-      <div className="flex flex-col items-center gap-3 py-10">
-        <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-gray-400">AI 正在解读...</p>
-      </div>
-    )
-  }
-
-  if (!text) return null
+  if (cards.length === 0) return null
 
   return (
     <motion.div
@@ -38,33 +29,29 @@ export default function ReadingResult({ spread, cards, text, streaming }: Props)
       animate={{ opacity: 1 }}
       className="space-y-4"
     >
-      {/* Card summary row */}
-      <div className="space-y-2">
-        {cards.map((c, i) => (
-          <ReadingCard
-            key={i}
-            name={c.card.name}
-            nameEn={c.card.nameEn}
-            reversed={c.reversed}
-            position={spread.positions[i]?.label || `牌${i + 1}`}
-            index={i}
-          />
-        ))}
-      </div>
+      {/* Card images laid out in the spread's shape — shown immediately on input */}
+      <SpreadLayout spread={spread} cards={cards} />
 
       {/* AI reading content — render markdown-like text */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3 }}
-        className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/50 prose prose-invert prose-sm max-w-none"
-      >
-        <div
-          className="whitespace-pre-wrap text-sm leading-relaxed text-gray-200"
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
-        />
-        {streaming && <span className="inline-block w-2 h-4 bg-purple-400 ml-0.5 animate-pulse" />}
-      </motion.div>
+      {!text && streaming ? (
+        <div className="flex flex-col items-center gap-3 py-10">
+          <div className="w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-400">AI 正在解读...</p>
+        </div>
+      ) : text ? (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-gray-800/40 rounded-xl p-4 border border-gray-700/50 prose prose-invert prose-sm max-w-none"
+        >
+          <div
+            className="whitespace-pre-wrap text-sm leading-relaxed text-gray-200"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(text) }}
+          />
+          {streaming && <span className="inline-block w-2 h-4 bg-purple-400 ml-0.5 animate-pulse" />}
+        </motion.div>
+      ) : null}
 
       <div ref={bottomRef} />
     </motion.div>

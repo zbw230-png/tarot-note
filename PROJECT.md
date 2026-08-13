@@ -2,7 +2,7 @@
 
 > 面向实体塔罗牌用户的 AI 解读工具 — 用简洁符号输入牌面，DeepSeek 即时解读。
 >
-> 最后更新：2026-08-12
+> 最后更新：2026-08-13
 
 ---
 
@@ -135,6 +135,24 @@
 - 点击展开完整解读
 - 长按/左滑删除
 
+### 5.3 牌面图片展示（牌阵摆放）
+
+用户点击「开始解读」后，结果区顶部会立即渲染所抽牌的 **Rider-Waite 牌面图片**，并按所选牌阵的经典形状摆放：
+
+- 单张 / 无牌阵三张 / 时间之流 → 一排
+- 圣三角 → 三角（顶点在上）
+- 二择一 → 岔路（现状在上，两分支在下）
+- 爱情十字 → 十字（你/对方左右，关系居中，过去上、未来下）
+- 凯尔特十字 → 十字 + 右侧竖列（第 2 张「阻碍」横置压在第 1 张「现状」上）
+- 六芒星 → 六边形排布
+
+**实现要点**：
+- 图片位置由 `src/lib/layouts.ts` 里的百分比坐标定义（每张牌的 `{x, y}` 中心点 + 可选 `rotate`），`SpreadLayout.tsx` 用绝对定位 + `translate(-50%,-50%)` 居中摆放。
+- **逆位牌**：图片旋转 180°（倒置显示）。
+- 图片路径映射在 `cards.ts` 的 `getCardImage()`：大牌 `m00~m21`，小牌 `w/c/s/p + 01~14`。
+
+**图片来源与授权**：Rider-Waite-Smith 牌面扫描，来自 [metabismuth/tarot-json](https://github.com/metabismuth/tarot-json) 的 `cards/` 目录（350×600px，共 78 张，约 7.6MB）。该牌面在美国属公有领域（出版于 1909 年），仓库 MIT 协议。**已本地打包到 `public/cards/`**（不依赖 `raw.githubusercontent.com`，国内可稳定加载）。
+
 ---
 
 ## 6. 项目结构
@@ -152,22 +170,25 @@ tarot-note/
 │   ├── App.tsx
 │   ├── App.css                 # Tailwind + 自定义样式
 │   ├── lib/
-│   │   ├── cards.ts            # 78张牌完整数据
+│   │   ├── cards.ts            # 78张牌完整数据 + 图片路径映射
 │   │   ├── parser.ts           # 输入符号解析器
 │   │   ├── spreads.ts          # 8种牌阵定义
+│   │   ├── layouts.ts          # 8种牌阵的视觉布局坐标（图片摆放位置）
 │   │   ├── storage.ts          # localStorage 封装
 │   │   └── prompt.ts           # AI prompt 模板
 │   ├── components/
 │   │   ├── SpreadSelector.tsx  # 牌阵选择器
 │   │   ├── CardInput.tsx       # 牌面输入框
-│   │   ├── ReadingCard.tsx     # 单张牌解读卡片
+│   │   ├── SpreadLayout.tsx    # 牌图按牌阵形状摆放
+│   │   ├── ReadingCard.tsx     # 单张牌解读卡片（已由 SpreadLayout 取代）
 │   │   ├── ReadingResult.tsx   # 完整解读结果
 │   │   ├── HistoryList.tsx     # 历史列表
 │   │   └── HistoryDetail.tsx   # 历史详情
 │   └── hooks/
 │       └── useStreamReading.ts # 流式读取 hook
 └── public/
-    └── manifest.json           # PWA 配置
+    ├── manifest.json           # PWA 配置
+    └── cards/                  # 78张 Rider-Waite 牌面图片（本地打包）
 ```
 
 ---
@@ -306,6 +327,7 @@ tarot-note/
 | 2026-08-12 | **修复**：前端发送给 API 的牌数据由嵌套 `card.name` 改为扁平 `{name, nameEn, reversed, position}`，解决解读显示 "undefined" 的问题。 |
 | 2026-08-12 | **完成**：端到端微信实测通过，应用正式可用。总结 7 个踩坑记录 + 复刻模板。 |
 | 2026-08-13 | **功能**：采纳 tarot.skill 的解读风格（混合型）+ 六段式输出结构（牌面描述/单牌含义/牌组互动/综合解读/行动建议/结语），并加入伦理边界（逆位≠坏、引导而非预言）。 |
+| 2026-08-13 | **功能**：用户输入牌后显示 Rider-Waite 牌面图片，并按牌阵形状摆放（逆位旋转 180°、凯尔特十字第 2 张横置）。新增 `public/cards/`（78 张本地打包）、`layouts.ts`、`SpreadLayout.tsx`。 |
 
 ---
 
