@@ -156,13 +156,14 @@
 
 **图片来源与授权**：Rider-Waite-Smith 牌面扫描，来自 [metabismuth/tarot-json](https://github.com/metabismuth/tarot-json) 的 `cards/` 目录（350×600px，共 78 张，约 7.6MB）。该牌面在美国属公有领域（出版于 1909 年），仓库 MIT 协议。**已本地打包到 `public/cards/`**（不依赖 `raw.githubusercontent.com`，国内可稳定加载）。
 
-### 5.4 双模式：选牌模式 / 快速输入模式
+### 5.4 三模式：选牌 / 抽牌 / 快速输入
 
-首页解读区顶部有两个模式切换按钮（分段控件）：
+首页解读区顶部有三个模式切换按钮（分段控件）：
 
 | 模式 | 说明 |
 |---|---|
 | **🃏 选牌模式** | 左侧一条可滚动的纵列牌库，顶部 5 个分类 tab（大阿卡纳 / 权杖 / 圣杯 / 宝剑 / 星币）。把牌**拖到**牌阵空位，或**点选 + 点空位**放置；点已放牌可移除。放满后点「开始解读」。 |
+| **🎴 抽牌模式** | 点「洗牌」播放洗牌动画后，78 张牌以**三层卡背**铺开，从卡背中**拖动**到牌阵位置，放置时翻转揭示牌面。 |
 | **⌨️ 快速输入** | 原文字符号输入模式（`0` / `四4` / `-三10`…），下方实时预览。 |
 
 **选牌模式交互细节**（`PickMode.tsx`，基于 @dnd-kit）：
@@ -174,6 +175,17 @@
 - 选牌模式下放置的牌同样走 `makeParsedCard()` 构造成 `ParsedCard`，与快速输入共用解读链路。
 
 **拖拽实现要点**：用 `MouseSensor`（`activationConstraint: { distance: 8 }`，鼠标移动 8px 才激活，避免与点击冲突）+ `TouchSensor`（`{ delay: 350, tolerance: 8 }`，长按 350ms 激活，未激活前正常滚动）。`DragOverlay` 渲染跟随指针的浮空牌图。
+
+### 5.5 抽牌模式（洗牌 → 三层卡背 → 拖动抽牌）
+
+`DrawMode.tsx`，与选牌模式共用 @dnd-kit 拖拽套路，差异在抽牌流程：
+
+- **洗牌动画**：点「洗牌」→ `ShuffleVisual` 播放 ~0.9s 洗牌动画（5 张卡背抖动位移/旋转）→ `shuffle(allCards)`（Fisher–Yates）得到随机牌序 → 铺开三层。
+- **三层卡背牌库**：78 张牌按洗牌后顺序切成 3 行（每行 26 张），每行 `overflow-x-auto` 横向滚动。卡背为 CSS 绘制（紫色放射渐变 + 内边框 + ✦ 符号），**无需卡背图片资源**。已抽走的牌在原位留下 `invisible` 占位，牌库位置稳定不回缩。
+- **拖动抽牌**：卡背是 `useDraggable`（id `draw-${card.id}`），拖到牌阵 slot（`useDroppable`）后揭示牌面；拖动过程中浮空图显示**卡背**（保持悬念），松手后 slot 用 `rotateY` 翻转动画揭示牌面。
+- **去除/归还**：点已放置的牌可移除，牌会**回到牌库原位**（`placedIds` 由 `slots` 派生，不在 slots 里的牌自动回到牌库）。
+- **朝向**：抽牌模式默认**正位**（`makeParsedCard(card, false)`）。如需随机正逆位可在洗牌时给每张牌随机赋 `reversed`。
+- 放满后点「开始解读」，走与其它模式相同的解读链路。
 
 ---
 
@@ -202,6 +214,7 @@ tarot-note/
 │   │   ├── SpreadSelector.tsx  # 牌阵选择器
 │   │   ├── CardInput.tsx       # 牌面输入框（快速输入模式）
 │   │   ├── PickMode.tsx        # 选牌模式（分类列 + 拖放/点选放置，@dnd-kit）
+│   │   ├── DrawMode.tsx        # 抽牌模式（洗牌动画 + 三层卡背 + 拖动抽牌）
 │   │   ├── SpreadLayout.tsx    # 牌图按牌阵形状摆放
 │   │   ├── ReadingCard.tsx     # 单张牌解读卡片（已由 SpreadLayout 取代）
 │   │   ├── ReadingResult.tsx   # 完整解读结果
@@ -354,6 +367,7 @@ tarot-note/
 | 2026-08-13 | **功能**：输入框下方增加实时牌阵预览——边打字边按牌阵形状显示牌图，增删即时刷新（`SpreadLayout` 加 `animated` 开关，预览态关闭动画）。 |
 | 2026-08-13 | **功能**：新增双模式（选牌模式 / 快速输入）。选牌模式左侧分类纵列牌库 + 点选放置到牌阵空位（`PickMode.tsx` + `SpreadBoard.tsx`），新增 `getCardsByCategory` / `makeParsedCard`。 |
 | 2026-08-13 | **功能**：选牌模式加入拖放（@dnd-kit/core）——电脑鼠标拖动、手机长按 350ms 拖动；新增「正位/逆位」全局开关；移除 `SpreadBoard.tsx`（并入 `PickMode.tsx` 的 `useDroppable` slot）。 |
+| 2026-08-13 | **功能**：新增第三个模式「抽牌模式」（`DrawMode.tsx`）——洗牌动画（Framer Motion）→ 78 张牌三层卡背铺开 → 拖动卡背到牌阵翻转揭示；卡背 CSS 绘制无需图片资源。 |
 
 ---
 

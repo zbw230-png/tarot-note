@@ -3,6 +3,7 @@ import './App.css'
 import SpreadSelector from './components/SpreadSelector'
 import CardInput from './components/CardInput'
 import PickMode from './components/PickMode'
+import DrawMode from './components/DrawMode'
 import ReadingResult from './components/ReadingResult'
 import HistoryList from './components/HistoryList'
 import { spreads, type SpreadDef } from './lib/spreads'
@@ -12,7 +13,7 @@ import { BookOpen } from 'lucide-react'
 
 function App() {
   const [view, setView] = useState<'reading' | 'history'>('reading')
-  const [mode, setMode] = useState<'pick' | 'quick'>('quick')
+  const [mode, setMode] = useState<'pick' | 'draw' | 'quick'>('quick')
   const [selectedSpread, setSelectedSpread] = useState<SpreadDef>(spreads[0])
   const { text, streaming, error, startReading } = useStreamReading()
 
@@ -72,7 +73,15 @@ function App() {
                     mode === 'pick' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
-                  🃏 选牌模式
+                  🃏 选牌
+                </button>
+                <button
+                  onClick={() => setMode('draw')}
+                  className={`flex-1 py-2 rounded-lg text-sm font-medium transition cursor-pointer ${
+                    mode === 'draw' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  🎴 抽牌
                 </button>
                 <button
                   onClick={() => setMode('quick')}
@@ -80,7 +89,7 @@ function App() {
                     mode === 'quick' ? 'bg-purple-600 text-white' : 'text-gray-400 hover:text-gray-200'
                   }`}
                 >
-                  ⌨️ 快速输入
+                  ⌨️ 输入
                 </button>
               </div>
 
@@ -95,8 +104,14 @@ function App() {
                   onReadingStart={handleReadingStart}
                   disabled={streaming}
                 />
-              ) : (
+              ) : mode === 'pick' ? (
                 <PickMode
+                  spread={selectedSpread}
+                  onReadingStart={handleReadingStart}
+                  disabled={streaming}
+                />
+              ) : (
+                <DrawMode
                   spread={selectedSpread}
                   onReadingStart={handleReadingStart}
                   disabled={streaming}
