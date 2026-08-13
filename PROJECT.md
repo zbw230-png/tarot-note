@@ -301,6 +301,7 @@ tarot-note/
 | 2026-08-12 | **代码完成**：项目初始化、数据层、UI 组件、流式 API、App 串联。构建通过。 |
 | 2026-08-12 | **部署**：迁移到 Cloudflare Workers（Vercel 被墙）。新增 `worker.js` + `wrangler.toml`。 |
 | 2026-08-12 | **修复**：SSE 流式解析改为 DeepSeek OpenAI 兼容格式（`choices[0].delta.content`）。API 实测返回正常中文解读。 |
+| 2026-08-12 | **修复**：前端发送给 API 的牌数据由嵌套 `card.name` 改为扁平 `{name, nameEn, reversed, position}`，解决解读显示 "undefined" 的问题。 |
 
 ---
 
