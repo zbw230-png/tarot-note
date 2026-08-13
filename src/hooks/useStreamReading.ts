@@ -24,10 +24,19 @@ export function useStreamReading(): UseStreamReadingReturn {
     setSavedId(null)
 
     try {
+      // Flatten cards to the shape the backend expects:
+      // { name, nameEn, reversed, position }
+      const flatCards = cards.map((c, i) => ({
+        name: c.card.name,
+        nameEn: c.card.nameEn,
+        reversed: c.reversed,
+        position: spread.positions[i]?.label || `牌${i + 1}`,
+      }))
+
       const response = await fetch('/api/reading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spread: spread.key, cards }),
+        body: JSON.stringify({ spread: spread.key, cards: flatCards }),
       })
 
       if (!response.ok) {
