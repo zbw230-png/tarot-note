@@ -23,6 +23,12 @@ interface Props {
   disabled: boolean
 }
 
+/** A card in the shuffled deck, with a hidden (face-down) orientation. */
+interface DeckCard {
+  card: TarotCard
+  reversed: boolean
+}
+
 const TABLEAU_W = 44 // px, face-down card width in the 3-row tableau
 const SLOT_W = 56 // px, spread slot width
 
@@ -53,9 +59,9 @@ function CardBack() {
 }
 
 /** A draggable face-down card in the tableau. */
-function FaceDownCard({ card, index }: { card: TarotCard; index: number }) {
+function FaceDownCard({ item, index }: { item: DeckCard; index: number }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: `draw-${card.id}`,
+    id: `draw-${item.card.id}`,
   })
 
   return (
@@ -78,16 +84,16 @@ function FaceDownCard({ card, index }: { card: TarotCard; index: number }) {
   )
 }
 
-/** A spread slot that accepts a dropped face-down card (reveals its face). */
+/** A spread slot that accepts a dropped face-down card (reveals face + orientation). */
 function Slot({
   index,
   spread,
-  card,
+  item,
   onTap,
 }: {
   index: number
   spread: SpreadDef
-  card: TarotCard | null
+  item: DeckCard | null
   onTap: (index: number) => void
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `slot-${index}` })
@@ -103,7 +109,7 @@ function Slot({
       className="absolute flex flex-col items-center cursor-pointer"
       style={{ left: `${spot.x}%`, top: `${spot.y}%`, transform: 'translate(-50%, -50%)', width: SLOT_W }}
     >
-      {card ? (
+      {item ? (
         <>
           <motion.span
             initial={{ scale: 0.5, rotateY: 90 }}
@@ -114,17 +120,21 @@ function Slot({
             }`}
           >
             <img
-              src={getCardImage(card)}
-              alt={card.name}
+              src={getCardImage(item.card)}
+              alt={item.card.name}
               draggable={false}
               className="block w-full h-auto select-none pointer-events-none"
+              style={item.reversed ? { transform: 'rotate(180deg)' } : undefined}
             />
           </motion.span>
           <span className="mt-1 flex flex-col items-center leading-tight">
             <span className="text-[10px] text-purple-300 font-medium whitespace-nowrap">
               {posLabel}
             </span>
-            <span className="text-[10px] text-gray-400 whitespace-nowrap">{card.name}</span>
+            <span className="text-[10px] text-gray-400 whitespace-nowrap">
+              {item.card.name}
+              {item.reversed ? <span className="text-orange-400"> 逆</span> : ''}
+            </span>
           </span>
         </>
       ) : (
@@ -176,11 +186,12 @@ function ShuffleVisual() {
 
 /**
  * Draw mode: shuffle the deck, lay it out face-down in three rows, then drag
- * face-down cards onto the spread (the card is revealed on placement).
+ * face-down cards onto the spread. Each card carries a random orientation
+ * assigned at shuffle time, revealed only when placed.
  */
 export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
-  const [deck, setDeck] = useState<TarotCard[]>([])
-  const [slots, setSlots] = useState<(TarotCard | null)[]>(() =>
+  const [deck, setDeck] = useState<DeckCard[]>([])
+  const [slots, setSlots] = useState<(DeckCard | null)[]>(() =>
     Array(spread.cardCount).fill(null)
   )
   const [shuffling, setShuffling] = useState(false)
@@ -199,12 +210,12 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
     setShuffling(false)
   }, [spread.key, spread.cardCount])
 
-  const placedIds = new Set(slots.filter(Boolean).map((c) => c!.id))
+  const placedIds = new Set(slots.filter(Boolean).map((c) => c!.card.id))
   const filled = slots.filter(Boolean).length
   const rows = [deck.slice(0, 26), deck.slice(26, 52), deck.slice(52, 78)]
-  const activeCard =
+  const activeItem =
     activeDragId && activeDragId.startsWith('draw-')
-      ? allCards.find((c) => `draw-${c.id}` === activeDragId) ?? null
+      ? deck.find((d) => `draw-${d.card.id}` === activeDragId) ?? null
       : null
 
   const handleShuffle = () => {
@@ -212,7 +223,9 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
     setSlots(Array(spread.cardCount).fill(null))
     setShuffled(false)
     setTimeout(() => {
-      setDeck(shuffle(allCards))
+      // Each card gets a random orientation at shuffle time; revealed on placement.
+      const decked = allCards.map((card) => ({ card, reversed: Math.random() < 0.5 }))
+      setDeck(shuffle(decked))
       setShuffling(false)
       setShuffled(true)
     }, 900)
@@ -222,16 +235,16 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
 
   const handleDragEnd = (e: DragEndEvent) => {
     const overId = e.over ? String(e.over.id) : null
-    const card = activeCard
+    const item = activeItem
     setActiveDragId(null)
 
-    if (!card || !overId || !overId.startsWith('slot-')) return
+    if (!item || !overId || !overId.startsWith('slot-')) return
     const idx = Number(overId.slice('slot-'.length))
     if (Number.isNaN(idx) || idx < 0 || idx >= spread.cardCount) return
 
     setSlots((prev) => {
       const next = [...prev]
-      next[idx] = card
+      next[idx] = item
       return next
     })
   }
@@ -248,7 +261,7 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
 
   const handleSubmit = () => {
     if (filled !== spread.cardCount) return
-    onReadingStart(slots.map((c) => makeParsedCard(c!, false)))
+    onReadingStart(slots.map((s) => makeParsedCard(s!.card, s!.reversed)))
   }
 
   return (
@@ -278,15 +291,15 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
           <div className="space-y-2">
             {rows.map((row, ri) => (
               <div key={ri} className="flex gap-1 overflow-x-auto pb-1">
-                {row.map((card, j) =>
-                  placedIds.has(card.id) ? (
+                {row.map((item, j) =>
+                  placedIds.has(item.card.id) ? (
                     <div
-                      key={card.id}
+                      key={item.card.id}
                       style={{ width: TABLEAU_W }}
                       className="shrink-0 aspect-[7/12] invisible"
                     />
                   ) : (
-                    <FaceDownCard key={card.id} card={card} index={ri * 26 + j} />
+                    <FaceDownCard key={item.card.id} item={item} index={ri * 26 + j} />
                   )
                 )}
               </div>
@@ -306,7 +319,7 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
               style={{ height: getLayout(spread.key).height, maxWidth: 360 }}
             >
               {spread.positions.map((_, i) => (
-                <Slot key={i} index={i} spread={spread} card={slots[i] || null} onTap={handleTapSlot} />
+                <Slot key={i} index={i} spread={spread} item={slots[i] || null} onTap={handleTapSlot} />
               ))}
             </div>
 
@@ -337,7 +350,7 @@ export default function DrawMode({ spread, onReadingStart, disabled }: Props) {
 
       {/* Floating face-down card while dragging */}
       <DragOverlay dropAnimation={null}>
-        {activeCard ? (
+        {activeItem ? (
           <div className="w-14 rounded-md overflow-hidden shadow-2xl shadow-black/70">
             <CardBack />
           </div>
