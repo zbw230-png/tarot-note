@@ -290,6 +290,8 @@ tarot-note/
 | GitHub 仓库 | ✅ zbw230-png/tarot-note |
 | Cloudflare 部署 | ✅ tarot-note2.zbw230.workers.dev |
 | AI 解读接口 | ✅ 已打通（流式返回） |
+| 牌面识别 + 正逆位 + 位置名 | ✅ 已验证正常 |
+| 端到端微信实测 | ✅ **已可用** |
 
 ---
 
@@ -302,12 +304,13 @@ tarot-note/
 | 2026-08-12 | **部署**：迁移到 Cloudflare Workers（Vercel 被墙）。新增 `worker.js` + `wrangler.toml`。 |
 | 2026-08-12 | **修复**：SSE 流式解析改为 DeepSeek OpenAI 兼容格式（`choices[0].delta.content`）。API 实测返回正常中文解读。 |
 | 2026-08-12 | **修复**：前端发送给 API 的牌数据由嵌套 `card.name` 改为扁平 `{name, nameEn, reversed, position}`，解决解读显示 "undefined" 的问题。 |
+| 2026-08-12 | **完成**：端到端微信实测通过，应用正式可用。总结 7 个踩坑记录 + 复刻模板。 |
 
 ---
 
 ## 13. 踩坑记录（务必阅读，避免重蹈覆辙）
 
-本次部署踩了 6 个坑，耗时最长的是坑 #4。以后做"国内手机可访问的 AI Web 应用"务必按此避坑。
+本次部署踩了 7 个坑，耗时最长的是坑 #4。以后做"国内手机可访问的 AI Web 应用"务必按此避坑。
 
 ### 坑 #1：Vercel 域名国内被墙 ❌
 
@@ -377,6 +380,24 @@ Deploy command:  npx wrangler deploy   ← 不是 dist！
 **解决**：`git remote set-url origin` 改成正确大小写。
 
 **教训**：GitHub 用户名区分大小写，拿不准就从浏览器地址栏复制完整 URL。
+
+### 坑 #7：前后端数据字段结构不一致 ⚠️
+
+**现象**：AI 返回的解读里所有牌名、正逆位、位置名都显示 "undefined"。
+
+**原因**：前端发送的是嵌套结构 `{ card: { name, nameEn }, reversed }`，后端 `worker.js` 读的是扁平字段 `{ name, nameEn, reversed, position }`。字段名对不上，全部变成 undefined。
+
+**解决**：前端发送前把数据拍平：
+```js
+cards.map((c, i) => ({
+  name: c.card.name,       // 从嵌套对象取出
+  nameEn: c.card.nameEn,
+  reversed: c.reversed,
+  position: spread.positions[i]?.label,  // 从牌阵定义补上位置名
+}))
+```
+
+**教训**：前后端共用数据契约时，发送前先确认字段形状完全一致。尤其注意：`position`（牌在牌阵中的位置名）这类字段前端原始数据里根本没有，需要从牌阵定义现算出来。
 
 ---
 
