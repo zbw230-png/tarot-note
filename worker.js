@@ -1,20 +1,27 @@
-// Cloudflare Pages Function — proxies requests to DeepSeek API with streaming
+// Cloudflare Worker — serves static assets + proxies DeepSeek API
 
-interface Env {
-  DEEPSEEK_API_KEY: string
+export default {
+  async fetch(request, env) {
+    const url = new URL(request.url)
+
+    // === API route: POST /api/reading ===
+    if (url.pathname === '/api/reading') {
+      return handleReading(request, env)
+    }
+
+    // === Static assets ===
+    try {
+      return await env.ASSETS.fetch(request)
+    } catch (err) {
+      return new Response('Not found', { status: 404 })
+    }
+  },
 }
 
-export async function onRequest(context: { request: Request; env: Env }) {
-  const { request, env } = context
-
-  // CORS
+async function handleReading(request, env) {
   if (request.method === 'OPTIONS') {
     return new Response(null, {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
+      headers: corsHeaders(),
     })
   }
 
@@ -22,14 +29,14 @@ export async function onRequest(context: { request: Request; env: Env }) {
     return json({ error: 'Method not allowed' }, 405)
   }
 
-  let body: { spread?: string; cards?: unknown[] }
+  let body
   try {
     body = await request.json()
   } catch {
     return json({ error: 'Invalid JSON body' }, 400)
   }
 
-  const { spread, cards } = body
+  const { spread, cards } = body || {}
   if (!spread || !cards || !Array.isArray(cards)) {
     return json({ error: 'Missing spread or cards' }, 400)
   }
@@ -40,7 +47,7 @@ export async function onRequest(context: { request: Request; env: Env }) {
   }
 
   const systemPrompt = buildSystemPrompt()
-  const userPrompt = buildUserPrompt(spread, cards as CardData[])
+  const userPrompt = buildUserPrompt(spread, cards)
 
   const deepseekResp = await fetch('https://api.deepseek.com/v1/chat/completions', {
     method: 'POST',
@@ -65,37 +72,35 @@ export async function onRequest(context: { request: Request; env: Env }) {
     return json({ error: `DeepSeek API error: ${errText}` }, deepseekResp.status)
   }
 
-  // Stream the response
   return new Response(deepseekResp.body, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*',
+      ...corsHeaders(),
     },
   })
 }
 
-// === Helpers ===
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  }
+}
 
-function json(data: unknown, status = 200): Response {
+function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
+      ...corsHeaders(),
     },
   })
 }
 
-interface CardData {
-  name: string
-  nameEn: string
-  reversed: boolean
-  position: string
-}
-
-function buildSystemPrompt(): string {
+function buildSystemPrompt() {
   return `你是一位经验丰富的专业塔罗解读师。你擅长结合牌阵位置、正逆位、牌面象征意义进行深度解读。
 你的解读风格温暖、有洞察力，融合心理学视角与塔罗传统智慧。
 请使用中文回复，语言流畅自然，避免生硬的模板感。
@@ -103,8 +108,8 @@ function buildSystemPrompt(): string {
 使用 markdown 格式输出。`
 }
 
-function buildUserPrompt(spreadKey: string, cards: CardData[]): string {
-  const spreadNameMap: Record<string, string> = {
+function buildUserPrompt(spreadKey, cards) {
+  const spreadNameMap = {
     'single': '单张单牌阵',
     'free-three': '无牌阵三张',
     'time-flow': '时间之流',
@@ -117,7 +122,7 @@ function buildUserPrompt(spreadKey: string, cards: CardData[]): string {
 
   const spreadName = spreadNameMap[spreadKey] || spreadKey
 
-  const positionHints: Record<string, Record<string, string>> = {
+  const positionHints = {
     'single': { '核心指引': '当前状况的核心信息或建议' },
     'free-three': { '牌一': '第一张牌的综合含义', '牌二': '第二张牌的综合含义', '牌三': '第三张牌的综合含义' },
     'time-flow': { '过去': '影响当前状况的过去因素', '现在': '当前所处的状态与核心问题', '未来': '发展趋势与可能的结果' },
